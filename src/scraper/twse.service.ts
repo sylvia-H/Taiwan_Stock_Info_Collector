@@ -124,4 +124,34 @@ export class TwseService {
       dealersNetBuySell: data[2] + data[5]
     }
   }
+
+  // 取得集中市場融資融券餘額
+  async getMarginTrading(options?: { date: string }) {
+    const date = options?.date ?? DateTime.local().toISODate()
+    const query = new URLSearchParams({
+      date: DateTime.fromISO(date).toFormat('yyyyMMdd'),
+      selectType: 'MS',
+      response: 'json'
+    })
+    const url = `${this.twseURL}/marginTrading/MI_MARGN?${query}`
+
+    const response = await firstValueFrom(this.httpService.get(url))
+    const json = response.data.stat === 'OK' && response.data
+    if (!json) return null
+
+    const data = json.tables[0].data
+      .map((data) => data.slice(1))
+      .flat()
+      .map((data) => numeral(data).value())
+
+    return {
+      date,
+      marginBalance: data[4],
+      marginBalanceChange: data[4] - data[3],
+      marginBalanceValue: data[14],
+      marginBalanceValueChange: data[14] - data[13],
+      shortBalance: data[9],
+      shortBalanceChange: data[9] - data[8]
+    }
+  }
 }

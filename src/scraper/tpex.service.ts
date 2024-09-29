@@ -93,4 +93,33 @@ export class TpexService {
       dealersBuySell: data[14]
     }
   }
+
+  // 取得櫃買市場融資融券餘額
+  async getMarginTrading(options?: { date: string }) {
+    const date = options?.date ?? DateTime.local().toISODate()
+    const [year, month, day] = date.split('-')
+    const query = new URLSearchParams({
+      d: `${+year - 1911}/${month}/${day}`,
+      o: 'json'
+    })
+    const url = `${this.tpexURL}/margin_trading/margin_balance/margin_bal_result.php?${query}`
+
+    const response = await firstValueFrom(this.httpService.get(url))
+    const json = response.data.iTotalRecords > 0 && response.data
+    if (!json) return null
+
+    const data = [...json.tfootData_one, ...json.tfootData_two]
+      .map((row) => numeral(row).value())
+      .filter((row) => row)
+
+    return {
+      date,
+      marginBalance: data[4],
+      marginBalanceChange: data[4] - data[0],
+      marginBalanceValue: data[14],
+      marginBalanceValueChange: data[14] - data[10],
+      shortBalance: data[9],
+      shortBalanceChange: data[9] - data[5]
+    }
+  }
 }
