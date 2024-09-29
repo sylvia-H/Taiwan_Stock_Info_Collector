@@ -8,7 +8,11 @@ import { DateTime } from 'luxon'
 
 @Injectable()
 export class TwseService {
-  constructor(private httpService: HttpService) {}
+  private readonly twseURL: string
+
+  constructor(private httpService: HttpService) {
+    this.twseURL = 'https://www.twse.com.tw/rwd/zh/afterTrading'
+  }
 
   // 取得上市/櫃股票清單
   async getStockLists(options?: { market: 'TSE' | 'OTC' }) {
@@ -44,7 +48,7 @@ export class TwseService {
       date: DateTime.fromISO(date).toFormat('yyyyMMdd'),
       response: 'json'
     })
-    const url = `https://www.twse.com.tw/rwd/zh/afterTrading/FMTQIK?${query}`
+    const url = `${this.twseURL}/FMTQIK?${query}`
 
     const response = await firstValueFrom(this.httpService.get(url))
     const json = response.data.stat === 'OK' && response.data
@@ -63,5 +67,34 @@ export class TwseService {
         }
       })
       .find((data) => data.date === date)
+  }
+
+  // 取得集中市場上漲及下跌家數
+  async getCountsUpDown(options?: { date: string }) {
+    const date = options?.date ?? DateTime.local().toISODate()
+    const query = new URLSearchParams({
+      date: DateTime.fromISO(date).toFormat('yyyyMMdd'),
+      response: 'json'
+    })
+    const url = `${this.twseURL}/MI_INDEX?${query}`
+
+    const response = await firstValueFrom(this.httpService.get(url))
+    const json = response.data.stat === 'OK' && response.data
+    if (!json) return null
+
+    const raw = json.tables[7].data.map((row) => row[2])
+    const [up, limitUp] = raw[0].replace(')', '').split('(')
+    const [down, limitDown] = raw[1].replace(')', '').split('(')
+    const [unchanged, unmatched, notApplicable] = raw.slice(2)
+
+    return {
+      date,
+      up: numeral(up).value(),
+      limitUp: numeral(limitUp).value(),
+      down: numeral(down).value(),
+      limitDown: numeral(limitDown).value(),
+      unchanged: numeral(unchanged).value(),
+      unmatched: numeral(unmatched).value() + numeral(notApplicable).value()
+    }
   }
 }

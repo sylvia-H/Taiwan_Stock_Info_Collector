@@ -6,7 +6,11 @@ import { DateTime } from 'luxon'
 
 @Injectable()
 export class TpexService {
-  constructor(private httpService: HttpService) {}
+  private readonly tpexURL: string
+
+  constructor(private httpService: HttpService) {
+    this.tpexURL = 'https://www.tpex.org.tw/web/stock/aftertrading'
+  }
 
   // 取得指定日期的櫃買市場成交資訊
   async getTradesInfo(options?: { date: string }) {
@@ -16,7 +20,7 @@ export class TpexService {
       d: `${+year - 1911}/${month}/${day}`,
       o: 'json'
     })
-    const url = `https://www.tpex.org.tw/web/stock/aftertrading/daily_trading_index/st41_result.php?${query}`
+    const url = `${this.tpexURL}/daily_trading_index/st41_result.php?${query}`
 
     const response = await firstValueFrom(this.httpService.get(url))
     const json = response.data.iTotalRecords > 0 && response.data
@@ -35,5 +39,30 @@ export class TpexService {
         }
       })
       .find((data) => data.date === date)
+  }
+
+  // 取得櫃買市場上漲及下跌家數
+  async getCountsUpDown(options?: { date: string }) {
+    const date = options?.date ?? DateTime.local().toISODate()
+    const [year, month, day] = date.split('-')
+    const query = new URLSearchParams({
+      d: `${+year - 1911}/${month}/${day}`,
+      o: 'json'
+    })
+    const url = `${this.tpexURL}/market_highlight/highlight_result.php?${query}`
+
+    const response = await firstValueFrom(this.httpService.get(url))
+    const json = response.data.iTotalRecords > 0 && response.data
+    if (!json) return null
+
+    return {
+      date,
+      up: numeral(json.upNum).value(),
+      limitUp: numeral(json.upStopNum).value(),
+      down: numeral(json.downNum).value(),
+      limitDown: numeral(json.downStopNum).value(),
+      unchanged: numeral(json.noChangeNum).value(),
+      unmatched: numeral(json.noTradeNum).value()
+    }
   }
 }
