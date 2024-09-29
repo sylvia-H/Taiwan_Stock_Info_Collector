@@ -11,7 +11,7 @@ export class TwseService {
   private readonly twseURL: string
 
   constructor(private httpService: HttpService) {
-    this.twseURL = 'https://www.twse.com.tw/rwd/zh/afterTrading'
+    this.twseURL = 'https://www.twse.com.tw/rwd/zh'
   }
 
   // 取得上市/櫃股票清單
@@ -48,7 +48,7 @@ export class TwseService {
       date: DateTime.fromISO(date).toFormat('yyyyMMdd'),
       response: 'json'
     })
-    const url = `${this.twseURL}/FMTQIK?${query}`
+    const url = `${this.twseURL}/afterTrading/FMTQIK?${query}`
 
     const response = await firstValueFrom(this.httpService.get(url))
     const json = response.data.stat === 'OK' && response.data
@@ -76,7 +76,7 @@ export class TwseService {
       date: DateTime.fromISO(date).toFormat('yyyyMMdd'),
       response: 'json'
     })
-    const url = `${this.twseURL}/MI_INDEX?${query}`
+    const url = `${this.twseURL}/afterTrading/MI_INDEX?${query}`
 
     const response = await firstValueFrom(this.httpService.get(url))
     const json = response.data.stat === 'OK' && response.data
@@ -95,6 +95,33 @@ export class TwseService {
       limitDown: numeral(limitDown).value(),
       unchanged: numeral(unchanged).value(),
       unmatched: numeral(unmatched).value() + numeral(notApplicable).value()
+    }
+  }
+
+  // 取得集中市場三大法人買賣超
+  async getThreeMajorInvestors(options?: { date: string }) {
+    const date = options?.date ?? DateTime.local().toISODate()
+    const query = new URLSearchParams({
+      dayDate: DateTime.fromISO(date).toFormat('yyyyMMdd'),
+      type: 'day',
+      response: 'json'
+    })
+    const url = `${this.twseURL}/fund/BFI82U?${query}`
+
+    const response = await firstValueFrom(this.httpService.get(url))
+    const json = response.data.stat === 'OK' && response.data
+    if (!json) return null
+
+    const data = json.data
+      .map((row) => row.slice(1))
+      .flat()
+      .map((row) => numeral(row).value())
+
+    return {
+      date,
+      finiNetBuySell: data[11] + data[14],
+      sitcNetBuySell: data[8],
+      dealersNetBuySell: data[2] + data[5]
     }
   }
 }

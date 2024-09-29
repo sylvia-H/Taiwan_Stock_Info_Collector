@@ -9,7 +9,7 @@ export class TpexService {
   private readonly tpexURL: string
 
   constructor(private httpService: HttpService) {
-    this.tpexURL = 'https://www.tpex.org.tw/web/stock/aftertrading'
+    this.tpexURL = 'https://www.tpex.org.tw/web/stock'
   }
 
   // 取得指定日期的櫃買市場成交資訊
@@ -20,7 +20,7 @@ export class TpexService {
       d: `${+year - 1911}/${month}/${day}`,
       o: 'json'
     })
-    const url = `${this.tpexURL}/daily_trading_index/st41_result.php?${query}`
+    const url = `${this.tpexURL}/aftertrading/daily_trading_index/st41_result.php?${query}`
 
     const response = await firstValueFrom(this.httpService.get(url))
     const json = response.data.iTotalRecords > 0 && response.data
@@ -49,7 +49,7 @@ export class TpexService {
       d: `${+year - 1911}/${month}/${day}`,
       o: 'json'
     })
-    const url = `${this.tpexURL}/market_highlight/highlight_result.php?${query}`
+    const url = `${this.tpexURL}/aftertrading/market_highlight/highlight_result.php?${query}`
 
     const response = await firstValueFrom(this.httpService.get(url))
     const json = response.data.iTotalRecords > 0 && response.data
@@ -63,6 +63,34 @@ export class TpexService {
       limitDown: numeral(json.downStopNum).value(),
       unchanged: numeral(json.noChangeNum).value(),
       unmatched: numeral(json.noTradeNum).value()
+    }
+  }
+
+  // 取得櫃買市場三大法人買賣超
+  async getThreeMajorInvestors(options?: { date: string }) {
+    const date = options?.date ?? DateTime.local().toISODate()
+    const [year, month, day] = date.split('-')
+    const query = new URLSearchParams({
+      d: `${+year - 1911}/${month}/${day}`,
+      t: 'D',
+      o: 'json'
+    })
+    const url = `${this.tpexURL}/3insti/3insti_summary/3itrdsum_result.php?${query}`
+
+    const response = await firstValueFrom(this.httpService.get(url))
+    const json = response.data.iTotalRecords > 0 && response.data
+    if (!json) return null
+
+    const data = json.aaData
+      .map((row) => row.slice(1))
+      .flat()
+      .map((row) => numeral(row).value())
+
+    return {
+      date,
+      finiNetBuySell: data[2],
+      sitcNetBuySell: data[11],
+      dealersBuySell: data[14]
     }
   }
 }
