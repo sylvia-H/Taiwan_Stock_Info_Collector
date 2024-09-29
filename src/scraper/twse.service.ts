@@ -1,13 +1,16 @@
 import * as cheerio from 'cheerio'
 import * as iconv from 'iconv-lite'
+import * as numeral from 'numeral'
 import { HttpService } from '@nestjs/axios'
 import { Injectable } from '@nestjs/common'
 import { firstValueFrom } from 'rxjs'
+import { DateTime } from 'luxon'
 
 @Injectable()
 export class TwseService {
   constructor(private httpService: HttpService) {}
 
+  // 取得上市/櫃股票清單
   async getStockLists(options?: { market: 'TSE' | 'OTC' }) {
     const market = options.market ?? 'TSE'
     const url = {
@@ -32,5 +35,33 @@ export class TwseService {
         }
       })
       .toArray()
+  }
+
+  // 取得指定日期的集中市場成交資訊
+  async getTradesInfo(options?: { date: string }) {
+    const date = options?.date ?? DateTime.local().toISODate()
+    const query = new URLSearchParams({
+      date: DateTime.fromISO(date).toFormat('yyyyMMdd'),
+      response: 'json'
+    })
+    const url = `https://www.twse.com.tw/rwd/zh/afterTrading/FMTQIK?${query}`
+
+    const response = await firstValueFrom(this.httpService.get(url))
+    const json = response.data.stat === 'OK' && response.data
+    if (!json) return null
+
+    return json.data
+      .map((row) => {
+        const [year, month, day] = row[0].split('/')
+        return {
+          date: `${+year + 1911}-${month}-${day}`,
+          tradeVolume: numeral(row[1]).value(),
+          tradeValue: numeral(row[2]).value(),
+          transaction: numeral(row[3]).value(),
+          price: numeral(row[4]).value(),
+          change: numeral(row[5]).value()
+        }
+      })
+      .find((data) => data.date === date)
   }
 }
