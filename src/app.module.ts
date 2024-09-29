@@ -1,4 +1,7 @@
-import { Module } from '@nestjs/common';
+import { Module } from '@nestjs/common/decorators'
+import { ScraperModule } from './scraper/scraper.module'
 
-@Module({})
+@Module({
+  imports: [ScraperModule]
+})
 export class AppModule {}
