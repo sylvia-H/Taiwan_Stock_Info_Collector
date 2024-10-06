@@ -15,7 +15,7 @@ export class TaifexService {
   }
 
   // 取得三大法人臺股期貨未平倉淨口數
-  async getThreeMajorOpenPositionTXF(options?: { date: string }) {
+  private async getThreeMajorOpenPositionTXF(options?: { date: string }) {
     const date = options?.date ?? DateTime.local().toISODate()
     const queryDate = DateTime.fromISO(date).toFormat('yyyy/MM/dd')
     const form = new URLSearchParams({
@@ -43,7 +43,7 @@ export class TaifexService {
   }
 
   // 取得三大法人臺指選擇權未平倉
-  async getThreeMajorOpenPositionTXO(options?: { date: string }) {
+  private async getThreeMajorOpenPositionTXO(options?: { date: string }) {
     const date = options?.date ?? DateTime.local().toISODate()
     const queryDate = DateTime.fromISO(date).toFormat('yyyy/MM/dd')
     const form = new URLSearchParams({
@@ -84,6 +84,92 @@ export class TaifexService {
       sitcTxoPutsNetOiValue: numeral(sitcPuts[15]).value(),
       dealersTxoPutsNetOi: numeral(dealersPuts[14]).value(),
       dealersTxoPutsNetOiValue: numeral(dealersPuts[15]).value()
+    }
+  }
+
+  // 取得小臺指所有契約未沖銷量
+  private async getMarketOiMXF(options?: { date: string }) {
+    const date = options?.date ?? DateTime.local().toISODate()
+    const queryDate = DateTime.fromISO(date).toFormat('yyyy/MM/dd')
+    const form = new URLSearchParams({
+      down_type: '1',
+      queryStartDate: queryDate,
+      queryEndDate: queryDate,
+      commodity_id: 'MTX'
+    })
+    const url = 'https://www.taifex.com.tw/cht/3/futDataDown'
+
+    const response = await firstValueFrom(
+      this.httpService.post(url, form, { responseType: 'arraybuffer' })
+    )
+    const json = await csvtojson({ noheader: true, output: 'csv' }).fromString(
+      iconv.decode(response.data, 'big5')
+    )
+    const [fields, ...rows] = json
+    if (fields[0] !== '交易日期') return null
+
+    const mxfMarketOi = rows
+      .filter((row) => row[17] === '一般' && !row[18])
+      .reduce((oi, row) => oi + numeral(row[11]).value(), 0)
+
+    return { date, mxfMarketOi }
+  }
+
+  // 取得三大法人小臺指多空未平倉
+  private async getThreeMajorOpenPositionMXF(options?: { date: string }) {
+    const date = options?.date ?? DateTime.local().toISODate()
+    const queryDate = DateTime.fromISO(date).toFormat('yyyy/MM/dd')
+    const form = new URLSearchParams({
+      queryStartDate: queryDate,
+      queryEndDate: queryDate,
+      commodityId: 'MXF'
+    })
+    const url = `${this.taifexURL}/3/futContractsDateDown`
+
+    const response = await firstValueFrom(
+      this.httpService.post(url, form, { responseType: 'arraybuffer' })
+    )
+    const json = await csvtojson({ noheader: true, output: 'csv' }).fromString(
+      iconv.decode(response.data, 'big5')
+    )
+    const [fields, dealers, sitc, fini] = json
+    if (fields[0] !== '日期') return null
+
+    const dealersLongOi = numeral(dealers[9]).value()
+    const dealersShortOi = numeral(dealers[11]).value()
+    const sitcLongOi = numeral(sitc[9]).value()
+    const sitcShortOi = numeral(sitc[11]).value()
+    const finiLongOi = numeral(fini[9]).value()
+    const finiShortOi = numeral(fini[11]).value()
+    const MXFLongOi = dealersLongOi + sitcLongOi + finiLongOi
+    const MXFShortOi = dealersShortOi + sitcShortOi + finiShortOi
+
+    return { date, MXFLongOi, MXFShortOi }
+  }
+
+  // 取得小臺指散戶多空比
+  async getRetailPositionMXF(options?: { date: string }) {
+    const date = options?.date ?? DateTime.local().toISODate()
+    const [marketOiMXF, threeMajorOpenPositionMXF] = await Promise.all([
+      this.getMarketOiMXF(options),
+      this.getThreeMajorOpenPositionMXF(options)
+    ])
+    if (!marketOiMXF || !threeMajorOpenPositionMXF) return null
+
+    const { mxfMarketOi } = marketOiMXF
+    const { MXFLongOi, MXFShortOi } = threeMajorOpenPositionMXF
+    const retailMxfLongOi = mxfMarketOi - MXFLongOi
+    const retailMxfShortOi = mxfMarketOi - MXFShortOi
+    const retailMxfNetOi = retailMxfLongOi - retailMxfShortOi
+    const retailMxfLongShortRatio =
+      Math.round((retailMxfNetOi / mxfMarketOi) * 10000) / 10000
+
+    return {
+      date,
+      retailMxfLongOi, // 散戶小台多單
+      retailMxfShortOi, // 散戶小台空單
+      retailMxfNetOi, // 散戶小台淨部位
+      retailMxfLongShortRatio // 散戶小台多空比
     }
   }
 }
